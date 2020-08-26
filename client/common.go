@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"github.com/milkbobo/gopay/common"
 	"github.com/milkbobo/gopay/util"
+	"github.com/shopspring/decimal"
 	"sort"
 	"strings"
-	"github.com/shopspring/decimal"
 )
 
 // 微信企业付款到零钱
@@ -127,17 +127,6 @@ func TruncatedText(data string, length int) string {
 func FilterTheSpecialSymbol(data string) string {
 	// 定义转换规则
 	specialSymbol := func(r rune) rune {
-		if r == '`' || r == '[' || r == '~' || r == '!' || r == '@' || r == '#' || r == '$' ||
-			r == '^' || r == '&' || r == '*' || r == '~' || r == '(' || r == ')' || r == '=' ||
-			r == '~' || r == '|' || r == '{' || r == '}' || r == '~' || r == ':' || r == ';' ||
-			r == '\'' || r == ',' || r == '\\' || r == '[' || r == ']' || r == '.' || r == '<' ||
-			r == '>' || r == '/' || r == '?' || r == '~' || r == '！' || r == '@' || r == '#' ||
-			r == '￥' || r == '…' || r == '&' || r == '*' || r == '（' || r == '）' || r == '—' ||
-			r == '|' || r == '{' || r == '}' || r == '【' || r == '】' || r == '‘' || r == '；' ||
-			r == '：' || r == '”' || r == '“' || r == '\'' || r == '"' || r == '。' || r == '，' ||
-			r == '、' || r == '？' || r == '%' || r == '+' || r == '_' || r == ']' || r == '"' || r == '&' {
-			return ' '
-		}
 		return r
 	}
 	data = strings.Map(specialSymbol, data)
@@ -181,6 +170,48 @@ func PostWechat(url string, data map[string]string, h *HTTPSClient) (common.WeCh
 		return xmlRe, errors.New("xmlRe.ErrCodeDes: " + xmlRe.ErrCodeDes)
 	}
 	return xmlRe, nil
+}
+
+func SandBoxGetSign(url string, data map[string]string, h *HTTPSClient) (string, error) {
+	var xmlRe struct {
+		ReturnCode     string `xml:"return_code" json:"return_code,omitempty"`
+		ReturnMsg      string `xml:"return_msg" json:"return_msg,omitempty"`
+		SandboxSignkey string `xml:"sandbox_signkey" json:"sandbox_signkey"`
+	}
+	buf := bytes.NewBufferString("")
+	var str string
+	for k, v := range data {
+		if k != "sign" {
+			str = fmt.Sprintf("<%s><![CDATA[%s]]></%s>", k, v, k)
+		} else {
+			str = fmt.Sprintf("<%s>%s</%s>", k, v, k)
+		}
+		buf.WriteString(str)
+	}
+	xmlStr := fmt.Sprintf("<xml>%s</xml>", buf.String())
+
+	hc := new(HTTPSClient)
+	if h != nil {
+		hc = h
+	} else {
+		hc = HTTPSC
+	}
+
+	re, err := hc.PostData(url, "text/xml:charset=UTF-8", xmlStr)
+	if err != nil {
+		return "", errors.New("HTTPSC.PostData: " + err.Error())
+	}
+
+	err = xml.Unmarshal(re, &xmlRe)
+	if err != nil {
+		return "", errors.New("xml.Unmarshal: " + err.Error())
+	}
+
+	if xmlRe.ReturnCode != "SUCCESS" {
+		// 通信失败
+		return "", errors.New("xmlRe.ReturnMsg: " + xmlRe.ReturnMsg)
+	}
+	return xmlRe.SandboxSignkey, nil
 }
 
 //对支付宝者查订单

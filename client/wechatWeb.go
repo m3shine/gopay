@@ -20,13 +20,14 @@ func DefaultWechatWebClient() *WechatWebClient {
 
 // WechatWebClient 微信公众号支付
 type WechatWebClient struct {
-	AppID       string       // 公众账号ID
-	MchID       string       // 商户号ID
-	Key         string       // 密钥
-	PrivateKey  []byte       // 私钥文件内容
-	PublicKey   []byte       // 公钥文件内容
-	httpsClient *HTTPSClient // 双向证书链接
-	Url         string
+	AppID             string       // 公众账号ID
+	MchID             string       // 商户号ID
+	Key               string       // 密钥
+	PrivateKey        []byte       // 私钥文件内容
+	PublicKey         []byte       // 公钥文件内容
+	httpsClient       *HTTPSClient // 双向证书链接
+	PayUrl            string
+	SandBoxGetSignUrl string
 }
 
 // Pay 支付
@@ -51,7 +52,7 @@ func (this *WechatWebClient) Pay(charge *common.Charge) (map[string]string, erro
 	m["sign"] = sign
 
 	// 转出xml结构
-	xmlRe, err := PostWechat(this.Url, m, nil)
+	xmlRe, err := PostWechat(this.PayUrl, m, nil)
 	if err != nil {
 		return map[string]string{}, err
 	}
@@ -63,6 +64,39 @@ func (this *WechatWebClient) Pay(charge *common.Charge) (map[string]string, erro
 	c["package"] = fmt.Sprintf("prepay_id=%s", xmlRe.PrepayID)
 	c["signType"] = "MD5"
 	sign2, err := WechatGenSign(this.Key, c)
+	if err != nil {
+		return map[string]string{}, errors.New("WechatWeb: " + err.Error())
+	}
+	c["paySign"] = sign2
+
+	return c, nil
+}
+
+func (this *WechatWebClient) SandBoxPay() (map[string]string, error) {
+	var m = make(map[string]string)
+	m["mch_id"] = this.MchID
+	m["nonce_str"] = util.RandomStr()
+	sign, err := WechatGenSign(this.Key, m)
+	if err != nil {
+		return map[string]string{}, err
+	}
+	m["sign"] = sign
+
+	sandBoxKey, err := SandBoxGetSign(this.SandBoxGetSignUrl, m, nil)
+
+	// 转出xml结构
+	xmlRe, err := PostWechat(this.PayUrl, m, nil)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	var c = make(map[string]string)
+	c["appId"] = this.AppID
+	c["timeStamp"] = fmt.Sprintf("%d", time.Now().Unix())
+	c["nonceStr"] = util.RandomStr()
+	c["package"] = fmt.Sprintf("prepay_id=%s", xmlRe.PrepayID)
+	c["signType"] = "MD5"
+	sign2, err := WechatGenSign(sandBoxKey, c)
 	if err != nil {
 		return map[string]string{}, errors.New("WechatWeb: " + err.Error())
 	}
