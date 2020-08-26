@@ -26,6 +26,7 @@ type WechatWebClient struct {
 	PrivateKey  []byte       // 私钥文件内容
 	PublicKey   []byte       // 公钥文件内容
 	httpsClient *HTTPSClient // 双向证书链接
+	Url         string
 }
 
 // Pay 支付
@@ -50,7 +51,7 @@ func (this *WechatWebClient) Pay(charge *common.Charge) (map[string]string, erro
 	m["sign"] = sign
 
 	// 转出xml结构
-	xmlRe, err := PostWechat("https://api.mch.weixin.qq.com/pay/unifiedorder", m, nil)
+	xmlRe, err := PostWechat(this.Url, m, nil)
 	if err != nil {
 		return map[string]string{}, err
 	}
